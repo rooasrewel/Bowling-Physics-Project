@@ -1,44 +1,83 @@
 // physics/movement.js
 import * as THREE from 'three';
 
-// 1. تعريف المتغيرات الفيزيائية الأساسية للحركة وثباتها
-export let velocity = new THREE.Vector3(0, 0, 0);     // السرعة الابتدائية للكرة في الأبعاد الثلاثة
-export let acceleration = new THREE.Vector3(0, 0, 0); // التسارع الناتج عن قوة الرمي
-const frictionCoefficient = 0.05;                     // معامل الاحتكاك الخاص بأرضية مسار البولينغ
+// المتغيرات الفيزيائية وحالة الكرة
+export let velocity = new THREE.Vector3(0, 0, 0);     // السرعة الحالية
+export let acceleration = new THREE.Vector3(0, 0, 0); // التسارع اللحظي
+export let isLaunched = { value: false };             // كائن لتتبع حالة الرمي بشكل مرجعي ديناميكي
 
-/**
- * دالة إطلاق أو رمي الكرة (قوة ابتدائية لحظية)
- * @param {THREE.Vector3} initialForce - متجه القوة المطبق على الكرة عند الرمي
- */
+const frictionCoefficient = 0.05;                     // معامل الاحتكاك
+const gravity = 9.81;                                 // الجاذبية الأرضية
+const endOfTrack = -55;                               // حدود نهاية المسار
+const originalFOV = 60;                               // زاوية الرؤية الأصلية
+
 export function launchBall(initialForce) {
-    // بناءً على قانون نيوتن الثاني: القوة تعطي تسارعاً لحظياً (بفرض الكتلة = 1)
     acceleration.copy(initialForce);
     velocity.add(acceleration);
-    
-    // تصفير التسارع فوراً بعد الدفعة الأولى لتستمر الكرة تحت تأثير سرعتها واحتكاك الأرضية فقط
-    acceleration.set(0, 0, 0);
+    isLaunched.value = true; // تم الرمي
+    acceleration.set(0, 0, 0); // تصفير التسارع فوراً بعد الدفعة الأولى
 }
 
-/**
- * دالة تحديث الحركة الفيزيائية للكرة في كل إطار (Frame)
- * @param {THREE.Mesh} ball - مجسم الكرة ثلاثي الأبعاد القادم من الشخص الأول
- * @param {number} deltaTime - الوقت الفاصل المنقضي بين كل إطار والآخر لضمان ثبات السرعة
- */
-export function updateBallMovement(ball, deltaTime) {
+// دالة التحكم بمدخلات الكيبورد (قبل الرمي)
+export function handleBallControl(event, ball, camera, initialCameraPos) {
+    if (!isLaunched.value) {
+        if (event.key === 'ArrowLeft' || event.key === 'a') {
+            if (ball.position.x > -5.0) ball.position.x -= 0.2;
+        }
+        if (event.key === 'ArrowRight' || event.key === 'd') {
+            if (ball.position.x < 5.0) ball.position.x += 0.2;
+        }
+        if (event.key === ' ') {
+            launchBall(new THREE.Vector3(0, 0, -24)); // إطلاق الكرة
+        }
+
+        // تحديث الكاميرا لتتبع الكرة أفقياً أثناء التوجيه وقبل الرمي
+        camera.fov = originalFOV;
+        camera.updateProjectionMatrix();
+        camera.position.set(ball.position.x, 4, initialCameraPos.z);
+        camera.lookAt(ball.position.x, ball.position.y, -20);
+    }
+}
+
+// دالة تحديث الحركة الفيزيائية والزوم السينمائي في كل إطار
+export function updateBallMovement(ball, camera, initialCameraPos, deltaTime) {
     if (!ball) return;
 
-    // 2. تطبيق قوة الاحتكاك لإبطاء الكرة تدريجياً
-    // الاحتكاك يعمل دائماً بعكس اتجاه الحركة الحالية للكرة
-    if (velocity.lengthSq() > 0.001) { 
-        // نقوم بعمل نسخة من اتجاه السرعة، وتصغيره بناءً على معامل الاحتكاك والزمن الفاصل
-        let friction = velocity.clone().normalize().multiplyScalar(-frictionCoefficient * deltaTime);
-        velocity.add(friction);
-    } else {
-        // إيقاف الكرة تماماً إذا أصبحت سرعتها قريبة جداً من الصفر لمنع الاهتزاز اللانهائي
+    // إذا تجاوزت الكرة نهاية المسار، تقف تماماً
+    if (ball.position.z <= endOfTrack) {
         velocity.set(0, 0, 0);
+        return;
     }
 
-    // 3. تحديث موقع الكرة بناءً على السرعة المتبقية والزمن (المسافة = السرعة × الزمن)
-    ball.position.x += velocity.x * deltaTime;
-    ball.position.z += velocity.z * deltaTime; // الحركة الأساسية لمسار البولينغ تكون على المحور Z وعرضياً على X
+    if (isLaunched.value) {
+        // تطبيق قوة الاحتكاك لإبطاء الكرة تدريجياً
+        if (velocity.lengthSq() > 0.001) { 
+            let frictionMagnitude = frictionCoefficient * gravity * deltaTime;
+            let friction = velocity.clone().normalize().multiplyScalar(-frictionMagnitude);
+            
+            if (velocity.length() <= friction.length()) {
+                velocity.set(0, 0, 0);
+            } else {
+                velocity.add(friction);
+            }
+        } else {
+            velocity.set(0, 0, 0);
+        }
+
+        // تحديث الموقع بناءً على السرعة والزمن
+        ball.position.x += velocity.x * deltaTime;
+        ball.position.z += velocity.z * deltaTime;
+
+        // الكاميرا تثبت في الخلف وتنظر باتجاه الكرة لرؤية التباطؤ
+        camera.position.copy(initialCameraPos);
+        camera.lookAt(ball.position.x, ball.position.y, ball.position.z);
+
+        // عمل الـ Zoom In السينمائي عند الاقتراب من النهاية
+        if (ball.position.z <= endOfTrack + 20) {
+            if (camera.fov > 25) {
+                camera.fov -= 1.0;
+                camera.updateProjectionMatrix();
+            }
+        }
+    }
 }

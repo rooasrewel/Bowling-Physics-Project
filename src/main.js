@@ -1,52 +1,66 @@
+// src/main.js
 import * as THREE from 'three';
-import { launchBall, updateBallMovement, velocity } from '../physics/movement.js';
+import { handleBallControl, updateBallMovement } from '../physics/movement.js';
 
-// 1. إنشاء المشهد والكاميرا والمنشئ بكامل حجم الشاشة
+// 1. إنشاء المشهد والكاميرا والمنشئ
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0e17); // خلفية داكنة مريحة للعين
+scene.background = new THREE.Color(0x0a0e17); 
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-// ضبط موقع الكاميرا ليكون مرتفعاً قليلاً وخلف الكرة تماماً لرؤية الحركة بوضوح
-camera.position.set(0, 4, 12); 
 
-const renderer = new THREE.WebGLRenderer({ antialias: true }); // تفعيل تنعيم الحواف ليكون المشهد ممتازاً
+const renderer = new THREE.WebGLRenderer({ antialias: true }); 
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// 2. إضافة إضاءة واقعية (إضاءة موجهة Directional مع إضاءة محيطية)
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // إضاءة خفيفة للمشهد ككل
+// 2. الإضاءة
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); // إضاءة قوية كالشمس لإظهار الأبعاد ثلاثية الأبعاد
-dirLight.position.set(5, 10, 7);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); 
+dirLight.position.set(5, 15, 10);
 scene.add(dirLight);
 
-// 3. إنشاء كرة بولينغ تجريبية واضحة وكبيرة (بحجم نصف قطر 1.5 بدلاً من 1)
-const geometry = new THREE.SphereGeometry(1.5, 64, 64); // زيادة التفاصيل لتكون الكرة ناعمة ودائرية تماماً
-// استخدام MeshStandardMaterial لكي تتفاعل الكرة مع الإضاءة والظلال بشكل واقعي
+// 3. إنشاء كرة البولينغ
+const ballRadius = 1.0; 
+const geometry = new THREE.SphereGeometry(ballRadius, 64, 64); 
 const material = new THREE.MeshStandardMaterial({ 
-    color: 0xe63946, // لون أحمر زاهي
-    roughness: 0.2,  // جعل الكرة لامعة ومصقولة مثل كرات البولينغ الحقيقية
+    color: 0xe63946, 
+    roughness: 0.1,  
     metalness: 0.1
 });
 const ball = new THREE.Mesh(geometry, material);
+ball.position.set(0, 0, 0); 
 scene.add(ball);
 
-// 4. إنشاء أرضية مسار ممتدة وواضحة جداً
-const floorGeo = new THREE.PlaneGeometry(20, 100);
+// 4. إنشاء أرضية المسار والشبكة المساعدة
+const trackLength = 60; 
+const floorGeo = new THREE.PlaneGeometry(12, trackLength);
 const floorMat = new THREE.MeshStandardMaterial({ 
-    color: 0xEEDC82, // أرضية رمادية داكنة متباينة مع الكرة حمراء
-    roughness: 0.5 
+    color: 0xd4a373, 
+    roughness: 0.3 
 });
 const floor = new THREE.Mesh(floorGeo, floorMat);
-floor.rotation.x = -Math.PI / 2; // تدوير الأرضية لتصبح أفقية
-floor.position.y = -1.5; // إنزال الأرضية لتلامس أسفل الكرة تماماً
+floor.rotation.x = -Math.PI / 2; 
+floor.position.y = -ballRadius; 
+floor.position.z = -trackLength / 2 + 2; 
 scene.add(floor);
 
-// 5. إطلاق الكرة بقوة مدروسة للأمام (على محور Z) وجانبياً قليلاً جداً لترى الانحراف والتوقف
-launchBall(new THREE.Vector3(0.5, 0, -40)); 
+const gridHelper = new THREE.GridHelper(trackLength, 30, 0x000000, 0x444444);
+gridHelper.position.y = -ballRadius + 0.01; 
+gridHelper.position.z = -trackLength / 2 + 2;
+scene.add(gridHelper);
 
-// 6. حلقة التحريك والفيزياء
+// 5. إعداد الموقع الابتدائي الثابت للكاميرا
+const initialCameraPos = new THREE.Vector3(0, 4, 10);
+camera.position.copy(initialCameraPos);
+camera.lookAt(0, 0, -20);
+
+// 6. الاستماع لأحداث الكيبورد وتمرير الكاميرا والكرة والوضع الابتدائي لها
+window.addEventListener('keydown', (event) => {
+    handleBallControl(event, ball, camera, initialCameraPos);
+});
+
+// 7. حلقة التحريك والفيزياء باستخدام Timer
 const timer = new THREE.Timer();
 
 function animate() {
@@ -55,28 +69,13 @@ function animate() {
     timer.update();
     const deltaTime = timer.getDelta();
 
-    // استدعاء الكود الفيزيائي لتحديث الحركة
-    updateBallMovement(ball, deltaTime);
-
-    // [إضافة]: إذا انعدمت سرعة الكرة تماماً (توقفت بفعل الاحتكاك)، أعدها لنقطة البداية وأطلقها مجدداً
-    if (velocity.lengthSq() === 0) {
-        ball.position.set(0, 0, 0);       // إعادة الكرة لنقطة الصفر (البرواز الابتدائى)
-        launchBall(new THREE.Vector3(0.8, 0, -25)); // إعادة إطلاقها بنفس القوة
-    }
-
-    // جعل الكاميرا تتبع الكرة
-    if (ball.position.z > -40) {
-        camera.position.z = ball.position.z + 12;
-        camera.lookAt(ball.position.x, ball.position.y, ball.position.z);
-    } else if (velocity.lengthSq() === 0) {
-        // إعادة الكاميرا أيضاً لموقعها الأصلي عند إعادة تصفير الكرة
-        camera.position.set(0, 4, 12);
-    }
+    // تحديث حركة الكرة والفيزياء والكاميرا بشكل مستمر
+    updateBallMovement(ball, camera, initialCameraPos, deltaTime);
 
     renderer.render(scene, camera);
 }
 
-// 7. تحديث أبعاد المشهد تلقائياً عند تغيير حجم نافذة المتصفح
+// التحديث التلقائي لحجم الشاشة
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
