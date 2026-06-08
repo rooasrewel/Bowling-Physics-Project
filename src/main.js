@@ -58,3 +58,5 @@ document.querySelector('#app').innerHTML = `
 `
 
 setupCounter(document.querySelector('#counter'))
+import './style.css';
+import './FirstPerson.js'
