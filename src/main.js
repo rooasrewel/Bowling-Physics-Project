@@ -1,6 +1,7 @@
 // src/main.js
 import * as THREE from 'three';
 import { handleBallControl, updateBallMovement } from '../physics/movement.js';
+import { updatePhysics } from '../physics/rotation.js'; // استيراد دالة الدوران الجديدة لتيماء
 
 // 1. إنشاء المشهد (تم اعتماد ألوان خلفية صالة صديقكِ)
 const scene = new THREE.Scene();
@@ -217,11 +218,13 @@ scene.add(frame);
 
 
 // ==========================================
-// ثانياً: دمج كرتكِ الفيزيائية الذكية والتحكم
+// ثانياً: دمج كرتكِ الفيزيائية الذكية والتحكم وكائن الحالة لتيماء
 // ==========================================
 
 // إنشاء الكرة (تم ضبط إحداثيات البداية لتتطابق مع بداية ممر صديقكِ)
 const ballRadius = 0.5; // الحجم المتوافق مع الممر الجديد
+const ballMass = 7;     // كتلة الكرة المعتمدة لدى تيماء (7 كغ)
+
 const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64); 
 const ballMaterial = new THREE.MeshStandardMaterial({ 
     color: 0xe63946, // كرتكِ الحمراء المميزة
@@ -229,10 +232,26 @@ const ballMaterial = new THREE.MeshStandardMaterial({
     metalness: 0.1
 });
 const ball = new THREE.Mesh(ballGeometry, ballMaterial);
-ball.position.set(0, ballRadius-0.02, 10); // وضعها فوق أرضية خط الخطأ تماماً
+ball.position.set(0, ballRadius - 0.02, 10); // وضعها فوق أرضية خط الخطأ تماماً
 ball.castShadow = true;
 ball.receiveShadow = true;
 scene.add(ball);
+
+// كائن الحالة الفيزيائية المتكامل (Physics State) الخاص بتيماء
+// قمت بربطه مباشرة بمتغيرات مشروعك الأساسية لمنع التضارب
+const state = {
+    ball: ball,
+    position: ball.position,              // ربط مباشر بموقع كرتكِ الحالية لتحديثها تلقائياً
+    velocity: new THREE.Vector3(0, 0, 0),  // مصفوفة السرعة الخطية ثلاثية الأبعاد
+    omega: new THREE.Vector3(0, 0, 0),     // مصفوفة السرعة الزاوية للدوران
+    torque: new THREE.Vector3(0, 0.25, 0), // عزم الدوران المطبق من كود تيماء
+    dt: 0.016,                             // قيمة deltaTime المرجعية للحسابات الحركية
+    r: ballRadius,
+    m: ballMass,
+    I: (2 / 5) * ballMass * ballRadius * ballRadius, // قانون حساب عزم العطالة للكرة الصلبة
+    friction: 0.985,
+    floorFriction: 0.992
+};
 
 // الاستماع لأحداث الكيبورد والتحكم الجانبي
 window.addEventListener('keydown', (event) => {
@@ -247,9 +266,16 @@ function animate() {
 
     timer.update();
     const deltaTime = timer.getDelta();
+    
+    // تحديث وقت الـ dt داخل الكائن ليتزامن مع أداء المتصفح الفعلي بدلاً من القيمة الثابتة
+    state.dt = deltaTime;
 
-    // استدعاء دالتكِ الفيزيائية لتحديث حركة الكرة والزوم السينمائي فوق الممر الجديد
-    updateBallMovement(ball, camera, initialCameraPos, deltaTime);
+    // 1. استدعاء فيزيائيات الدوران وعزم الحركة الخاصة بتيماء لتحديث مصفوفة التدحرج
+    updatePhysics(state);
+
+    // 2. استدعاء دالتكِ الفيزيائية الأساسية لتحديث حركة الكرة والزوم السينمائي والتقييد فوق الممر
+    // قمنا بتمرير مصفوفة السرعة المشتركة (state.velocity) لربط الحركتين ببعضهما
+    updateBallMovement(ball, camera, initialCameraPos, deltaTime, state.velocity);
 
     renderer.render(scene, camera);
 }
