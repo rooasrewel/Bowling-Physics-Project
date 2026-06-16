@@ -1,6 +1,6 @@
 // src/main.js
 import * as THREE from 'three';
-import { handleBallControl, updateBallMovement } from '../physics/movement.js';
+import { handleBallControl, updateBallMovement, isLaunched, velocity } from '../physics/movement.js';
 import { updatePhysics } from '../physics/rotation.js'; // استيراد دالة الدوران الجديدة لتيماء
 
 // 1. إنشاء المشهد (تم اعتماد ألوان خلفية صالة صديقكِ)
@@ -20,15 +20,17 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // ==========================================
-// أولاً: تركيب عناصر تصميم الصالة (كود صديقكِ بالكامل)
+// أولاً: تركيب عناصر تصميم الصالة (كود صديقكِ بالكامل مع تحديث اللمعان)
 // ==========================================
 
-// خامات الممرات والأرضيات
+// خامات الممرات والأرضيات - تم تطويرها لتصبح مصقولة فائقة اللمعان (Clearcoat)
 const laneGeometry = new THREE.BoxGeometry(4, 0.2, 20);
 const laneMaterial = new THREE.MeshStandardMaterial({
     color: 0xc68642,
-    roughness: 0.3,
-    metalness: 0.1
+    roughness: 0.06,      // خفض الخشونة للحصول على مظهر مصقول جداً كالمرايا تعكس أضواء الصالة
+    metalness: 0.2,       // بريق طفيف لتعزيز الانعكاسات الطولية للضوء
+    clearcoat: 1.0,       // طبقة طلاء زجاجية إضافية مثل ملمع الخشب الحقيقي
+    clearcoatRoughness: 0.05
 });
 
 // الممر الأوسط (الرئيسي الذي ستتحرك فيه الكرة)
@@ -133,6 +135,8 @@ scene.add(ambientLight);
 const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 directionalLight.position.set(5, 10, 8);
 directionalLight.castShadow = true;
+directionalLight.shadow.mapSize.width = 2048; // تحسين دقة الظلال الساقطة على الخشب اللامع
+directionalLight.shadow.mapSize.height = 2048;
 scene.add(directionalLight);
 
 // جدار خلف الدبابيس وأرضية الدبابيس (Pin Deck)
@@ -221,7 +225,6 @@ scene.add(frame);
 // ثانياً: دمج كرتكِ الفيزيائية الذكية والتحكم وكائن الحالة لتيماء
 // ==========================================
 
-// إنشاء الكرة (تم ضبط إحداثيات البداية لتتطابق مع بداية ممر صديقكِ)
 const ballRadius = 0.5; // الحجم المتوافق مع الممر الجديد
 const ballMass = 7;     // كتلة الكرة المعتمدة لدى تيماء (7 كغ)
 
@@ -232,17 +235,19 @@ const ballMaterial = new THREE.MeshStandardMaterial({
     metalness: 0.1
 });
 const ball = new THREE.Mesh(ballGeometry, ballMaterial);
-ball.position.set(0, ballRadius - 0.02, 10); // وضعها فوق أرضية خط الخطأ تماماً
+
+// تعديل موضع البداية الرأسي ليكون معلقاً في الهواء (Y = 1.2 متر) بانتظار قوى الرمي والسقوط الحر
+ball.position.set(0, 1.2, 10); 
 ball.castShadow = true;
 ball.receiveShadow = true;
 scene.add(ball);
 
 // كائن الحالة الفيزيائية المتكامل (Physics State) الخاص بتيماء
-// قمت بربطه مباشرة بمتغيرات مشروعك الأساسية لمنع التضارب
+// تم ربط موجه مصفوفة السرعة (velocity) بالمتغير المصدّر والمكشوف من ملف حركتكِ مباشرة لمنع الانفصال الحركي
 const state = {
     ball: ball,
     position: ball.position,              // ربط مباشر بموقع كرتكِ الحالية لتحديثها تلقائياً
-    velocity: new THREE.Vector3(0, 0, 0),  // مصفوفة السرعة الخطية ثلاثية الأبعاد
+    velocity: velocity,                   // ربط مرجعي مباشر بمتغير السرعة المصدّر من ملف movement.js الخاص بكِ
     omega: new THREE.Vector3(0, 0, 0),     // مصفوفة السرعة الزاوية للدوران
     torque: new THREE.Vector3(0, 0.25, 0), // عزم الدوران المطبق من كود تيماء
     dt: 0.016,                             // قيمة deltaTime المرجعية للحسابات الحركية
@@ -273,9 +278,8 @@ function animate() {
     // 1. استدعاء فيزيائيات الدوران وعزم الحركة الخاصة بتيماء لتحديث مصفوفة التدحرج
     updatePhysics(state);
 
-    // 2. استدعاء دالتكِ الفيزيائية الأساسية لتحديث حركة الكرة والزوم السينمائي والتقييد فوق الممر
-    // قمنا بتمرير مصفوفة السرعة المشتركة (state.velocity) لربط الحركتين ببعضهما
-    updateBallMovement(ball, camera, initialCameraPos, deltaTime, state.velocity);
+    // 2. استدعاء دالتكِ الفيزيائية المطورة لتحديث قفزة السقوط، والمسار القوسي (Hook)، والزوم السينمائي
+    updateBallMovement(ball, camera, initialCameraPos, deltaTime);
 
     renderer.render(scene, camera);
 }
