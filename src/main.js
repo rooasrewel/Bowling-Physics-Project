@@ -2,6 +2,11 @@
 import * as THREE from 'three';
 import { handleBallControl, updateBallMovement, isLaunched, velocity } from '../physics/movement.js';
 import { updatePhysics } from '../physics/rotation.js'; // استيراد دالة الدوران الجديدة لتيماء
+import { Pin } from '../physics/pins.js'; // أو المسار الصحيح لملف القوارير لديكِ
+import { detectCollision } from '../physics/collision.js';
+
+// إنشاء مصفوفة لتخزين كائنات القوارير الذكية
+const mainPins = [];
 
 // 1. إنشاء المشهد (تم اعتماد ألوان خلفية صالة صديقكِ)
 const scene = new THREE.Scene();
@@ -157,21 +162,13 @@ scene.add(pinDeck);
 // بناء وتوزيع الدبابيس (Pins) لجميع الممرات
 const pinMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 function createPin(x, z) {
-    const pin = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.35, 24), pinMaterial);
-    base.position.y = 0.18;
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.6, 24), pinMaterial);
-    body.position.y = 0.65;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 24), pinMaterial);
-    head.position.y = 1.05;
-    const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 24), new THREE.MeshStandardMaterial({ color: 0xcc0000 }));
-    stripe.position.y = 0.9;
+    // إنشاء كائن قارورة ذكي من الكلاس الخاص بكِ
+    const pinInstance = new Pin(x, z);
     
-    pin.add(base, body, head, stripe);
-    pin.position.set(x, 0, z);
-    pin.traverse((obj) => { if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; } });
-    scene.add(pin);
-    return pin;
+  
+    scene.add(pinInstance.mesh);
+    mainPins.push(pinInstance);
+    return pinInstance;
 }
 
 // توزيع الدبابيس للممر الأوسط والممرات الجانبية
@@ -280,7 +277,11 @@ function animate() {
 
     // 2. استدعاء دالتكِ الفيزيائية المطورة لتحديث قفزة السقوط، والمسار القوسي (Hook)، والزوم السينمائي
     updateBallMovement(ball, camera, initialCameraPos, deltaTime);
-
+    // 🔥 حقن السرعة والكتلة داخل كائن الكرة مباشرة لكي تقرأها دالة detectCollision بنجاح
+    ball.velocity = state.velocity;
+    ball.mass = state.m;
+// 2. معالجة التصادم بين الكرة ومصفوفة القوارير الذكية
+    detectCollision(ball, mainPins, deltaTime);
     renderer.render(scene, camera);
 }
 
