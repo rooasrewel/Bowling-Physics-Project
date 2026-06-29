@@ -4,6 +4,7 @@ import { handleBallControl, updateBallMovement, isLaunched, velocity } from '../
 import { updatePhysics } from '../physics/rotation.js'; // استيراد دالة الدوران الجديدة لتيماء
 import { Pin } from '../physics/pins.js'; // أو المسار الصحيح لملف القوارير لديكِ
 import { detectCollision } from '../physics/collision.js';
+import { createDecorations } from './environment/decorations.js'; // إنشاء عناصر الديكور (مقاعد، رفوف كرات، أعمدة...) داخل المشهد
 
 // إنشاء مصفوفة لتخزين كائنات القوارير الذكية
 const mainPins = [];
@@ -158,6 +159,18 @@ const pinDeck = new THREE.Mesh(pinDeckGeometry, pinDeckMaterial);
 pinDeck.position.set(0, -0.05, -9);
 pinDeck.receiveShadow = true;
 scene.add(pinDeck);
+// عمل الحفرة خلف الدبابيس 
+const pitGeometry = new THREE.BoxGeometry(5, 1.5, 4);
+
+const pitMaterial = new THREE.MeshStandardMaterial({
+    color: 0x111111
+});
+
+const pit = new THREE.Mesh(pitGeometry, pitMaterial);
+
+pit.position.set(0, -0.8, -13);
+
+scene.add(pit);
 
 // بناء وتوزيع الدبابيس (Pins) لجميع الممرات
 const pinMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
@@ -291,5 +304,7 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+createDecorations(scene); // إضافة جميع عناصر الديكور إلى المشهد (لا تؤثر على الفيزياء أو الحركة)
 
 animate();

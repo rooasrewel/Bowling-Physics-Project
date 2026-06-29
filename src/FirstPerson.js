@@ -174,7 +174,7 @@ floor.receiveShadow = true;
 scene.add(floor);
 
 // الجدار الأيسر
-const leftWallGeometry = new THREE.BoxGeometry(0.5, 6, 35);
+ const leftWallGeometry = new THREE.BoxGeometry(0.5, 6, 35);
 
 const wallMaterial = new THREE.MeshStandardMaterial({
     color: 0xd0d0d0
